@@ -149,3 +149,4 @@ open your browser and go to `http://localhost:5555` to see the dashboard.
 ## POSTMAN Collection
 
 Download the POSTMAN collection from [/assets/mini-rag-app.postman_collection.json](/assets/mini-rag-app.postman_collection.json)
+# mini-rag-app
