@@ -9,7 +9,7 @@ class DataController(BaseController):
         if file.content_type not in self.app_settings.ALLOWED_FILE_TYPES :
             raise ValueError(f"File type {file.content_type} is not allowed.")
 
-        if file.size > self.app_settings.FILE_MAX_SIZE:
+        if file.size > self.app_settings.FILE_MAX_SIZE * self.size_scale:
             raise ValueError(f"File size exceeds the maximum limit of {self.app_settings.FILE_MAX_SIZE} MB.")
         
         return True
