@@ -1,1 +1,1 @@
-from .config import get_settings, settings
+from .config import get_settings, Settings
