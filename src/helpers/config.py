@@ -11,9 +11,12 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = "../.env"
+        extra = "allow"  # allows unknown fields without errors
 
 def get_settings():
-    return Settings(APP_NAME="My App", APP_VERSION="1.0.0", 
+    return Settings(APP_NAME="My App", 
+                    APP_VERSION="1.0.0", 
                     OPEN_API_KEY="your_api_key",
                     ALLOWED_FILE_TYPES=["text/plain", "application/pdf"], 
-                    FILE_MAX_SIZE=10, FILE_DEFAULT_CHUNK_SIZE=512000)
+                    FILE_MAX_SIZE=10,
+                    FILE_DEFAULT_CHUNK_SIZE=512000)
