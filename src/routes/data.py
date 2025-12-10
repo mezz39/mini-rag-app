@@ -6,6 +6,8 @@ from helpers import get_settings, Settings
 from models.enums.ResponseEnums import ResponseSignal
 import aiofiles
 import os
+import logging
+logger = logging.getLogger("uvicorn.error")
 data_router = APIRouter(prefix= "/api/v1/data",
             tags= ["api_v1", "data"])
 @data_router.get("/test")
@@ -29,19 +31,21 @@ async def upload_data(project_id:str, file: UploadFile, app_settings: Settings= 
         project_dir_path, 
         file.filename or "default_filename"
         )
-    file_path = DataController().generate_unique_filename(
+    file_path, random_key = DataController().generate_unique_filename(
         original_filename= file.filename or "default_filename",
         project_id= project_id
     )
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     
     await file.seek(0)
-    
-    async with aiofiles.open(file_path,'wb') as f:
-        while chunk := await file.read(app_settings.FILE_DEFAULT_CHUNK_SIZE):
-            
-            await f.write(chunk)
 
+    try :
+        async with aiofiles.open(file_path,'wb') as f:
+            while chunk := await file.read(app_settings.FILE_DEFAULT_CHUNK_SIZE):
+                
+                await f.write(chunk)
+    except Exception as e:
+        logger.error(f"Error while uploading file: {e}")
 
     return JSONResponse(
         content= {
