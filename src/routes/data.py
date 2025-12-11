@@ -19,42 +19,46 @@ async def test():
     return {"status": "ok"}
 
 @data_router.post("/upload/{project_id}")
-async def upload_data(project_id:str, file: UploadFile, app_settings: Settings= Depends(get_settings)):
-    
-    
+async def upload_data(project_id: str, file: UploadFile, app_settings: Settings = Depends(get_settings)):
+
     # validate the file type and size
     is_valid = await DataController().validate_uploaded_file(file)
-    
     if not is_valid:
         return JSONResponse(
-            status_code= status.HTTP_400_BAD_REQUEST,
-            content= {"message": is_valid})
-
-    project_dir_path = ProjectController().get_project_path(project_id)
-    file_path = os.path.join(
-        project_dir_path, 
-        file.filename or "default_filename"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"message": is_valid}
         )
+
+    # generate unique filename
     file_path, file_id = DataController().generate_unique_filename(
-        original_filename= file.filename or "default_filename",
-        project_id= project_id
+        original_filename=file.filename or "default_filename",
+        project_id=project_id
     )
+
+    # ensure directory exists
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    
+
+    # reset file pointer
     await file.seek(0)
 
-    try :
-        async with aiofiles.open(file_path,'wb') as f:
+    # write the file to disk
+    try:
+        import aiofiles
+        async with aiofiles.open(file_path, 'wb') as f:
             while chunk := await file.read(app_settings.FILE_DEFAULT_CHUNK_SIZE):
-                
                 await f.write(chunk)
     except Exception as e:
         logger.error(f"Error while uploading file: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": f"Error while uploading file: {e}"}
+        )
 
     return JSONResponse(
-        content= {
+        content={
             "signal": "File_Upload_Successful",
-            "file_id": file_id
+            "file_id": file_id,
+            "file_path": file_path
         }
     )
 @data_router.get("/debug-process/{project_id}/{file_id}")
