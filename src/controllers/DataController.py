@@ -9,8 +9,8 @@ class DataController(BaseController):
         super().__init__()
         self.size_scale = 1048576
     async def validate_uploaded_file(self, file: UploadFile):
-        contents = file.read()
-        file_size = contents.__sizeof__()
+        contents = await file.read()
+        file_size = len(contents)
         if file.content_type not in self.app_settings.ALLOWED_FILE_TYPES :
             return False, ResponseSignal.FILE_TYPE_NOT_SUPPORTED.value
 
@@ -20,7 +20,7 @@ class DataController(BaseController):
         return True, ResponseSignal.FILE_VALIDATED_SUCCESS.value
         
     def generate_unique_filename(self, original_filename: str, project_id:str) :
-        random_filename= self.generate_random_string()  
+        random_key= self.generate_random_string()  
         project_path = ProjectController().get_project_path(project_id = project_id)
 
         cleaned_filename = self.get_clean_filename(
@@ -29,16 +29,16 @@ class DataController(BaseController):
 
         new_file_path = os.path.join(
             project_path,
-            random_filename, cleaned_filename
+            random_key, cleaned_filename
         )
 
         while os.path.exists(new_file_path):
-            random_filename= self.generate_random_string()  
+            random_key= self.generate_random_string()  
             new_file_path = os.path.join(
                 project_path,
-                random_filename, '_', cleaned_filename
+                random_key, '_', cleaned_filename
             )
-        return new_file_path
+        return new_file_path, random_key + '_' + cleaned_filename
 
     
     def get_clean_filename(self, original_filename: str) -> str:
