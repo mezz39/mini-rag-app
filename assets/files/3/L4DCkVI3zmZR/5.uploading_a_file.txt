@@ -1,0 +1,22 @@
+# Notes on 5. Uploading A File
+
+tut-003
+- MVC
+models views controllers
+helpers ---> config.py
+
+pydantic settings for data validation
+install requirments
+
+config 
+
+datarouter
+the file has a special function called upload file
+now to validate the file properties we have to make some logic and we are not going to make it on datarouter
+instead in controller ---> DataController to build the logic 
+
+checking for the environment file and the path as .env is outside the src
+
+now we have to meet another way to save constant is enums
+
+chunking the data
