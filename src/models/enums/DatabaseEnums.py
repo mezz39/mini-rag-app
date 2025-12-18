@@ -1,5 +1,5 @@
 from enum import Enum
 
-class DatabaseEnums(str, Enum):
-    PROJECTS_COLLECTION = "projects"
-    DATA_CHUNKS_COLLECTION = "data_chunks"
+class DatabaseEnums(Enum):
+    COLLECTION_PROJECTS = "projects"
+    COLLECTION_DATA_CHUNKS = "data_chunks"

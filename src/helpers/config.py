@@ -1,9 +1,12 @@
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    class Config:
-        env_file = ".env"
-        extra = "allow"  # allows unknown fields without errors
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore" # 'ignore' is safer than 'allow' for config
+    )  # allows unknown fields without errors
 
     APP_NAME: str 
     APP_VERSION: str

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, UploadFile, status
+from fastapi import FastAPI, APIRouter, Depends, UploadFile, status, Request
 from fastapi.responses import JSONResponse
 from controllers import DataController
 from controllers import ProjectController
@@ -9,8 +9,10 @@ import aiofiles
 import os
 import logging
 from .schemas.data import ProcessRequest
-
-
+from models.ProjectModel import ProjectModel
+from models.db_schemas import DataChunk
+from models.ChunkModel import ChunkModel
+from bson.objectid import ObjectId
 logger = logging.getLogger("uvicorn.error")
 data_router = APIRouter(prefix= "/api/v1/data",
             tags= ["api_v1", "data"])
@@ -19,10 +21,21 @@ async def test():
     return {"status": "ok"}
 
 @data_router.post("/upload/{project_id}")
-async def upload_data(project_id: str, file: UploadFile, app_settings: Settings = Depends(get_settings)):
+async def upload_data(request: Request, 
+                      project_id: str, 
+                      file: UploadFile, 
+                      app_settings: Settings = Depends(get_settings)):
+
+    project_model = ProjectModel(
+        db_client=request.app.state.db_client
+    )    
+    project  = await project_model.get_project_or_create_one(
+        project_id = project_id
+    )
 
     # validate the file type and size
-    is_valid = await DataController().validate_uploaded_file(file)
+    Data_controller = DataController()
+    is_valid = await Data_controller.validate_uploaded_file(file)
     if not is_valid:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -30,7 +43,7 @@ async def upload_data(project_id: str, file: UploadFile, app_settings: Settings 
         )
 
     # generate unique filename
-    file_path, file_id = DataController().generate_unique_filename(
+    file_path, file_id = Data_controller.generate_unique_filename(
         original_filename=file.filename or "default_filename",
         project_id=project_id
     )
@@ -57,40 +70,31 @@ async def upload_data(project_id: str, file: UploadFile, app_settings: Settings 
     return JSONResponse(
         content={
             "signal": "File_Upload_Successful",
-            "file_id": file_id,
-            "file_path": file_path
+            "file_id": file_id
         }
     )
-@data_router.get("/debug-process/{project_id}/{file_id}")
-async def debug_process(project_id: str, file_id: str):
-    process = ProcessController(project_id)
 
-    # 1️⃣ Get loader
-    loader = process.get_file_loader(file_id)
-    print("LOADER:", loader)
-
-    # 2️⃣ Get file path
-    file_path = process.get_file_path(file_id)
-    print("FILE PATH:", file_path)
-    file_extension = process.get_file_extension(file_id)
-    print("FILE EXTENSION:", file_extension)
-    # 3️⃣ Load file content
-    file_content = process.get_file_content(file_id)
-    print("FILE CONTENT RAW:", file_content)
-
-    return {
-        "loader": str(loader),
-        "file_path": file_path,
-        "file_extension": file_extension,
-        "file_content_preview": file_content[:200] if file_content else None,
-        "is_file_content_none": file_content is None
-    }
 @data_router.post("/process/{project_id}")
-async def process_endpoint(project_id:str, process_request: ProcessRequest):
+async def process_endpoint(request: Request, 
+                           project_id:str, process_request: ProcessRequest):
     file_id = process_request.file_id
     chunk_size = process_request.chunk_size
     overlap_size = process_request.overlap_size
     do_reset = process_request.do_reset
+    
+    # Normalize do_reset to int (could arrive as string from request)
+    try:
+        do_reset = int(do_reset) if do_reset is not None else 0
+    except (ValueError, TypeError):
+        do_reset = 0
+
+    project_model = ProjectModel(
+        db_client=request.app.state.db_client
+    )
+
+    project = await project_model.get_project_or_create_one(
+        project_id= project_id
+    )
     # normalize optional values from the request to plain ints
     process_controller = ProcessController(project_id=project_id)
 
@@ -100,9 +104,11 @@ async def process_endpoint(project_id:str, process_request: ProcessRequest):
     file_loader = process_controller.get_file_loader(
         file_id= file_id
     )
+
     file_content = process_controller.get_file_content(
         file_id = file_id
     )
+
     file_chunks = process_controller.process_file_content(
         file_id=file_id,
         chunk_size= chunk_size,
@@ -117,4 +123,52 @@ async def process_endpoint(project_id:str, process_request: ProcessRequest):
             }
         )
     
-    return file_chunks
+    chunk_model = ChunkModel(
+        db_client= request.app.state.db_client
+    )
+    if do_reset == 1:
+        # delete existing chunks for the project
+        logger.info(f"=== RESET DEBUG ===")
+        logger.info(f"project._id value: {project._id}")
+        logger.info(f"project._id type: {type(project._id)}")
+        
+        # Check how many chunks exist with this project_id
+        existing_chunks = await chunk_model.collection.count_documents({"chunk_project_id": project._id})
+        logger.info(f"Chunks found with project._id: {existing_chunks}")
+        
+        # Now delete them
+        deleted = await chunk_model.delete_chunks_by_project_id(str(project._id))
+        logger.info(f"Deleted {deleted} chunks")
+        logger.info(f"=== RESET END ===")
+    
+    if project._id is None:
+        return JSONResponse(
+            status_code= status.HTTP_400_BAD_REQUEST,
+            content= {
+                "signal": ResponseSignal.FILE_PROCESSED_FAILED.value,
+                "message": "Project ID is invalid."
+            }
+        )
+    
+    file_chunk_records = [
+        DataChunk(
+            chunk_text= chunk.page_content,
+            chunk_metadata= chunk.metadata,
+            chunk_order= i+1,
+            chunk_project_id= project._id
+        )
+        for i, chunk in enumerate(file_chunks)
+    ]
+    no_records = await chunk_model.insert_many_chunks(
+        chunks= file_chunk_records,
+        batch_size= 100
+
+    )
+
+    return JSONResponse(
+        content= {
+            "signal": ResponseSignal.FILE_PROCESSED_SUCCESS.value,
+            "message": 
+                f"File processed successfully with {no_records} chunks stored."
+        }
+    )
