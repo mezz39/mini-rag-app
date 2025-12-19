@@ -11,8 +11,12 @@ import logging
 from .schemas.data import ProcessRequest
 from models.ProjectModel import ProjectModel
 from models.db_schemas import DataChunk
+from models.db_schemas import Asset
 from models.ChunkModel import ChunkModel
 from bson.objectid import ObjectId
+from models.AssetModel import AssetModel
+from models.enums.AssetTypeEnums import AssetTypeEnums
+
 logger = logging.getLogger("uvicorn.error")
 data_router = APIRouter(prefix= "/api/v1/data",
             tags= ["api_v1", "data"])
@@ -26,7 +30,7 @@ async def upload_data(request: Request,
                       file: UploadFile, 
                       app_settings: Settings = Depends(get_settings)):
 
-    project_model = ProjectModel(
+    project_model = await ProjectModel.create_instance(
         db_client=request.app.state.db_client
     )    
     project  = await project_model.get_project_or_create_one(
@@ -66,11 +70,28 @@ async def upload_data(request: Request,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"message": f"Error while uploading file: {e}"}
         )
+    
+    asset_model = await AssetModel.create_instance(
+        db_client=request.app.state.db_client
+    )    
+    
+    
+    
+    asset_resource = Asset(
+        asset_project_id= project.id,
+        asset_type=str(AssetTypeEnums.ASSETFILETYPE.value),
+        asset_name=file_id,
+        asset_size = os.path.getsize(file_path)
+    )
+    
+    asset_record = await asset_model.create_asset(
+        asset= asset_resource
+    )
 
     return JSONResponse(
         content={
             "signal": "File_Upload_Successful",
-            "file_id": file_id
+            "file_id": str(asset_record.id)
         }
     )
 
@@ -88,7 +109,7 @@ async def process_endpoint(request: Request,
     except (ValueError, TypeError):
         do_reset = 0
 
-    project_model = ProjectModel(
+    project_model = await ProjectModel.create_instance(
         db_client=request.app.state.db_client
     )
 
@@ -123,25 +144,25 @@ async def process_endpoint(request: Request,
             }
         )
     
-    chunk_model = ChunkModel(
+    chunk_model = await ChunkModel.create_instance(
         db_client= request.app.state.db_client
     )
     if do_reset == 1:
         # delete existing chunks for the project
         logger.info(f"=== RESET DEBUG ===")
-        logger.info(f"project._id value: {project._id}")
-        logger.info(f"project._id type: {type(project._id)}")
+        logger.info(f"project._id value: {project.id}")
+        logger.info(f"project._id type: {type(project.id)}")
         
         # Check how many chunks exist with this project_id
-        existing_chunks = await chunk_model.collection.count_documents({"chunk_project_id": project._id})
+        existing_chunks = await chunk_model.collection.count_documents({"chunk_project_id": project.id})
         logger.info(f"Chunks found with project._id: {existing_chunks}")
         
         # Now delete them
-        deleted = await chunk_model.delete_chunks_by_project_id(str(project._id))
+        deleted = await chunk_model.delete_chunks_by_project_id(str(project.id))
         logger.info(f"Deleted {deleted} chunks")
         logger.info(f"=== RESET END ===")
     
-    if project._id is None:
+    if project.id is None:
         return JSONResponse(
             status_code= status.HTTP_400_BAD_REQUEST,
             content= {
@@ -155,7 +176,7 @@ async def process_endpoint(request: Request,
             chunk_text= chunk.page_content,
             chunk_metadata= chunk.metadata,
             chunk_order= i+1,
-            chunk_project_id= project._id
+            chunk_project_id= project.id
         )
         for i, chunk in enumerate(file_chunks)
     ]

@@ -12,20 +12,20 @@ debug_router = APIRouter(prefix="/api/v1/debug", tags=["debug"])
 @debug_router.get("/chunks/{project_id}")
 async def debug_chunks(request: Request, project_id: str):
     """Debug endpoint: Show all chunks for a project and their structure."""
-    project_model = ProjectModel(db_client=request.app.state.db_client)
-    chunk_model = ChunkModel(db_client=request.app.state.db_client)
+    project_model =await ProjectModel.create_instance(db_client=request.app.state.db_client)
+    chunk_model = await ChunkModel.create_instance(db_client=request.app.state.db_client)
     
     project = await project_model.get_project_or_create_one(project_id=project_id)
     
-    logger.info(f"Project ID type: {type(project._id)}, value: {project._id}")
+    logger.info(f"Project ID type: {type(project.id)}, value: {project.id}")
     
     # Query chunks directly to inspect structure
-    chunks = await chunk_model.collection.find({"chunk_project_id": project._id}).to_list(None)
-    chunks_str_query = await chunk_model.collection.find({"chunk_project_id": str(project._id)}).to_list(None)
+    chunks = await chunk_model.collection.find({"chunk_project_id": project.id}).to_list(None)
+    chunks_str_query = await chunk_model.collection.find({"chunk_project_id": str(project.id)}).to_list(None)
     
     return {
-        "project._id": str(project._id),
-        "project._id_type": str(type(project._id)),
+        "project._id": str(project.id),
+        "project._id_type": str(type(project.id)),
         "chunks_with_objectid_query": len(chunks),
         "chunks_with_string_query": len(chunks_str_query),
         "first_chunk_sample": str(chunks[0]) if chunks else None,
@@ -36,25 +36,27 @@ async def debug_chunks(request: Request, project_id: str):
 @debug_router.post("/delete-chunks/{project_id}")
 async def delete_chunks_endpoint(request: Request, project_id: str):
     """Force delete all chunks for a project and verify."""
-    project_model = ProjectModel(db_client=request.app.state.db_client)
-    chunk_model = ChunkModel(db_client=request.app.state.db_client)
+    project_model = await ProjectModel.create_instance(
+        db_client=request.app.state.db_client
+    )
+    chunk_model = await ChunkModel.create_instance(db_client=request.app.state.db_client)
     
     project = await project_model.get_project_or_create_one(project_id=str(project_id))
     
     # Count before delete
-    count_before = await chunk_model.collection.count_documents({"chunk_project_id": project._id})
+    count_before = await chunk_model.collection.count_documents({"chunk_project_id": project.id})
     logger.info(f"Chunks BEFORE delete: {count_before}")
     
     # Delete
-    deleted = await chunk_model.delete_chunks_by_project_id(str(project._id))
+    deleted = await chunk_model.delete_chunks_by_project_id(str(project.id))
     logger.info(f"Deleted: {deleted}")
     
     # Count after delete
-    count_after = await chunk_model.collection.count_documents({"chunk_project_id": project._id})
+    count_after = await chunk_model.collection.count_documents({"chunk_project_id": project.id})
     logger.info(f"Chunks AFTER delete: {count_after}")
     
     return {
-        "project._id": str(project._id),
+        "project._id": str(project.id),
         "count_before": count_before,
         "deleted": deleted,
         "count_after": count_after
@@ -91,7 +93,7 @@ async def debug_process(project_id: str, file_id: str):
 @debug_router.get("/all-chunks-breakdown")
 async def debug_all_chunks(request: Request):
     """Show all chunks grouped by project."""
-    chunk_model = ChunkModel(db_client=request.app.state.db_client)
+    chunk_model = await ChunkModel.create_instance(db_client=request.app.state.db_client)
     
     # Total chunks
     total_chunks = await chunk_model.collection.count_documents({})
@@ -134,8 +136,10 @@ async def wipe_db(request: Request, payload: dict):
         return {"error": "To wipe the DB send JSON body {\"confirm\": \"WIPE\"}"}
 
     # Collections to wipe
-    project_model = ProjectModel(db_client=request.app.state.db_client)
-    chunk_model = ChunkModel(db_client=request.app.state.db_client)
+    project_model = await ProjectModel.create_instance(
+        db_client=request.app.state.db_client
+    )
+    chunk_model = await ChunkModel.create_instance(db_client=request.app.state.db_client)
 
     proj_res = await project_model.collection.delete_many({})
     chunk_res = await chunk_model.collection.delete_many({})

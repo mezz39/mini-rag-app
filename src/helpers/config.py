@@ -8,24 +8,20 @@ class Settings(BaseSettings):
         extra="ignore" # 'ignore' is safer than 'allow' for config
     )  # allows unknown fields without errors
 
-    APP_NAME: str 
-    APP_VERSION: str
-    OPEN_API_KEY: str
+    APP_NAME: str = "mini rag"
+    APP_VERSION: str = "1.0.0"
+    OPEN_API_KEY: str = "your_api_key"
 
-    ALLOWED_FILE_TYPES: list[str]
-    FILE_MAX_SIZE: int  # in MB
-    FILE_DEFAULT_CHUNK_SIZE: int  # in bytes
+    ALLOWED_FILE_TYPES: list[str] = ["text/plain", "application/pdf"]
+    FILE_MAX_SIZE: int = 10  # in MB
+    FILE_DEFAULT_CHUNK_SIZE: int = 512000  # in bytes
 
-    MONGODB_URI: str
-    MONGODB_DATABASE: str
+    MONGODB_URI: str = "mongodb://localhost:27007"
+    MONGODB_DATABASE: str = "mydatabase"
     
 
 def get_settings():
-    return Settings(APP_NAME="My App", 
-                    APP_VERSION="1.0.0", 
-                    OPEN_API_KEY="your_api_key",
-                    ALLOWED_FILE_TYPES=["text/plain", "application/pdf"], 
-                    FILE_MAX_SIZE=10,
-                    FILE_DEFAULT_CHUNK_SIZE=512000,
-                    MONGODB_URI="mongodb://localhost:27007",
-                    MONGODB_DATABASE="mydatabase")
+    # Construct Settings without explicit overrides so environment variables
+    # and the .env file are respected. If necessary, callers may override
+    # values via environment variables.
+    return Settings()
