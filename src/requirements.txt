@@ -7,3 +7,5 @@ aiofiles==23.2.1
 langchain 
 PyMuPDF 
 motor==3.7.1
+pydantic-mongo==2.3.0
+openai==2.14.0
