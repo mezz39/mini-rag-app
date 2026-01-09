@@ -3,45 +3,41 @@ from dotenv import load_dotenv
 load_dotenv(".env")
 from routes import base, data, datadebug
 from motor.motor_asyncio import AsyncIOMotorClient
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 from helpers.config import get_settings
-from models.db_schemas import DataChunk, Project
-import logging
 
-logger = logging.getLogger("uvicorn.error")
+from stores.llm.LLMProviderFactory import LLMProviderFactory
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+app = FastAPI()
+
+async def startup_db_client():
     settings = get_settings()
-    client = AsyncIOMotorClient(settings.MONGODB_URI)
-    app.state.mongodb_client = client
-    app.state.db_client = client[settings.MONGODB_DATABASE]
+    app.state.mongo_conn = AsyncIOMotorClient(settings.MONGODB_URI)
+    app.state.db_client = [settings.MONGODB_DATABASE]
+    llm_provider_factory = LLMProviderFactory(settings)
+    # Generation
+    app.state.generation_client = llm_provider_factory.create(provider=settings.Generation_backend)
+    if app.state.generation_client is None:
+        raise RuntimeError("Embedding LLM provider could not be initialized")
+    app.state.generation_client.set_generation_model(model_id=settings.GENERATION_MODEl_ID)
 
-    # Create indexes on startup
-    try:
-        db = app.state.db_client
-        
-        # Create indexes for data_chunks collection
-        chunks_collection = db["data_chunks"]
-        for index_spec in DataChunk.get_indexes():
-            await chunks_collection.create_index(index_spec["key"], name=index_spec.get("name"), unique=index_spec.get("unique", False))
-            logger.info(f"Created index on data_chunks: {index_spec['name']}")
-        
-        # Create indexes for projects collection
-        projects_collection = db["projects"]
-        for index_spec in Project.get_indexes():
-            await projects_collection.create_index(index_spec["key"], name=index_spec.get("name"), unique=index_spec.get("unique", False))
-            logger.info(f"Created index on projects: {index_spec['name']}")
-    except Exception as e:
-        logger.error(f"Error creating indexes: {e}")
+    # Embedding
+    app.state.embedding_client = llm_provider_factory.create(provider=settings.Embedding_backend)
 
-    yield
+    if app.state.embedding_client is None:
+        raise RuntimeError("Embedding LLM provider could not be initialized")
+
+    app.state.embedding_client.set_embedding_model(model_id=settings.EMBEDDING_MODEL_ID,
+                                                   embedding_size= settings.EMBEDDING_MODEL_SIZE
+    )
+
     
-    client.close()
+async def shutdown_db_client():
+    app.state.mongo_conn.close()
+    
 
-app = FastAPI(lifespan=lifespan)
-app.add_event_handler("startup", lifespan)
+app.state.router.lifespan.on_startup.append(startup_db_client)
+app.state.router.lifespan.on_shutdown.append(shutdown_db_client)
+
 
 
 app.include_router(base.base_router)
